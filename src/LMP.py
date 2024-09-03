@@ -1,13 +1,15 @@
 
-import openai
+from openai import OpenAI
 from time import sleep
-from openai.error import RateLimitError, APIConnectionError
+from openai import RateLimitError, APIConnectionError
 from pygments import highlight
 from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
 from utils import load_prompt, DynamicObservation, IterableDynamicObservation
 import time
 from LLM_cache import DiskCache
+import os
+
 
 class LMP:
     """Language Model Program (LMP), adopted from Code as Policies."""
@@ -22,6 +24,7 @@ class LMP:
         self.exec_hist = ''
         self._context = None
         self._cache = DiskCache(load_cache=self._cfg['load_cache'])
+        self.client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])  # this is also the default, it can be omitted
 
     def clear_exec_hist(self):
         self.exec_hist = ''
@@ -76,7 +79,7 @@ class LMP:
                 print('(using cache)', end=' ')
                 return self._cache[kwargs]
             else:
-                ret = openai.ChatCompletion.create(**kwargs)['choices'][0]['message']['content']
+                ret = self.client.chat.completions.create(**kwargs).choices[0].message.content
                 # post processing
                 ret = ret.replace('```', '').replace('python', '').strip()
                 self._cache[kwargs] = ret
@@ -86,7 +89,7 @@ class LMP:
                 print('(using cache)', end=' ')
                 return self._cache[kwargs]
             else:
-                ret = openai.Completion.create(**kwargs)['choices'][0]['text'].strip()
+                ret = self.client.chat.completions.create(**kwargs).choices[0].text.strip()
                 self._cache[kwargs] = ret
                 return ret
 
@@ -105,6 +108,7 @@ class LMP:
                 )
                 break
             except (RateLimitError, APIConnectionError) as e:
+                print(f'error model is {self._cfg["model"]}')
                 print(f'OpenAI API got err {e}')
                 print('Retrying after 3s.')
                 sleep(3)
